@@ -55,7 +55,8 @@ def main(argv):
     """
     Main function of filt
     """
-    version = 0.1.0
+    version = "0.1.1"
+    packet_send_overhead = 0
     initial_flow_rate = 1
     flow_rate_increase = 1
     max_flow_rate = 100
@@ -175,9 +176,11 @@ def main(argv):
 
     #*** Start the packet sending loop:
     while not finished:
+        packet_start_time = time.time()
         #*** Send a packet over raw socket for speed:
         strpkt = str(pkt)
         s.sendto(strpkt, (target_ip, 0))
+        packet_send_overhead = time.time() - packet_start_time
         packets_sent += 1
 
         #*** Increment source port:
@@ -219,9 +222,10 @@ def main(argv):
                 print "reached maximum flow rate, exiting..."
                 break
             prev_packets_sent = packets_sent
-        sleep_time = float(1/flow_rate)
-        #*** Sleep for interval seconds:
-        time.sleep(sleep_time)
+        sleep_time = float(1/flow_rate) - packet_send_overhead
+        if sleep_time > 0:
+            #*** Sleep for interval seconds:
+            time.sleep(sleep_time)
 
 def warning_challenge():
     """
