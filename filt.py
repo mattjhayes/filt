@@ -55,7 +55,7 @@ def main(argv):
     """
     Main function of filt
     """
-    version = 1.1
+    version = 0.1.0
     initial_flow_rate = 1
     flow_rate_increase = 1
     max_flow_rate = 100
