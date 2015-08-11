@@ -56,7 +56,14 @@ def main(argv):
     Main function of filt
     """
     version = "0.1.1"
-    packet_send_overhead = 0
+    pkt_send_overhead = 0
+    total_overhead = 0
+    first_time = 1
+    first_time_in_interval = 1
+    pkt_max_time = 0
+    pkt_total_time = 0
+    pkts_in_interval = 0
+    header_row = 1
     initial_flow_rate = 1
     flow_rate_increase = 1
     max_flow_rate = 100
@@ -77,7 +84,7 @@ def main(argv):
 
     #*** Start by parsing command line parameters:
     try:
-        opts, args = getopt.getopt(argv, "hr:f:m:t:c:p:d:w:Wv",
+        opts, args = getopt.getopt(argv, "hr:f:m:t:c:p:d:w:Wjv",
                                   ["help",
                                    "initial-flow-rate=",
                                    "flow-rate-increase=",
@@ -88,6 +95,7 @@ def main(argv):
                                    "protocol=",
                                    "dport=",
                                    "output-file=",
+                                   "no-header-row",
                                    "version"])
     except getopt.GetoptError as err:
         print "filt: Error with options:", err
@@ -122,6 +130,8 @@ def main(argv):
         elif opt == "-W":
             output_file = time.strftime("%Y%m%d-%H%M%S.csv")
             output_file_enabled = 1
+        elif opt in ("-j", "--no-header-row"):
+            header_row = 0
 
     if not target_ip:
         #*** We weren't passed a target IP so have to exit
@@ -176,14 +186,25 @@ def main(argv):
 
     #*** Start the packet sending loop:
     while not finished:
-        packet_start_time = time.time()
+        loop_start_time = time.time()
         #*** Send a packet over raw socket for speed:
         strpkt = str(pkt)
         s.sendto(strpkt, (target_ip, 0))
-        packet_send_overhead = time.time() - packet_start_time
+        pkt_send_overhead = time.time() - loop_start_time
         packets_sent += 1
 
-        #*** Increment source port:
+        #*** Accumulate stats on packet sending overhead:
+        pkt_total_time += pkt_send_overhead
+        pkts_in_interval += 1
+        if pkt_send_overhead > pkt_max_time:
+            pkt_max_time = pkt_send_overhead
+        if first_time_in_interval:
+            pkt_min_time = pkt_send_overhead
+            first_time_in_interval = 0
+        elif pkt_send_overhead < pkt_min_time:
+            pkt_min_time = pkt_send_overhead
+
+        #*** Increment packet source port:
         sport += 1
         if sport > 65535:
             sport = 1025
@@ -196,33 +217,56 @@ def main(argv):
             #*** Update UDP source port:
             pkt[UDP].sport = sport
 
-        #*** Check if we need to up the flow rate:
+        #*** Check if we need to up the target flow rate:
         current_time = time.time()
         if (current_time - last_increment_time) > increment_interval:
             #*** Calculate actual average flow rate since last increase:
-            actual_flow_rate = (packets_sent -prev_packets_sent) / \
+            actual_flow_rate = (packets_sent - prev_packets_sent) / \
                                   (current_time - last_increment_time)
-            #*** Increase flow rate:
+            pkt_avg_time = pkt_total_time / pkts_in_interval
+
+            #*** Increase target flow rate:
             flow_rate = flow_rate + flow_rate_increase
             #*** Print to screen:
-            print "increasing flow rate to", flow_rate, \
+            print "increasing target flow rate to", flow_rate, \
                        "Actual avg rate", actual_flow_rate
             if output_file_enabled:
+                if first_time and header_row:
+                    #*** Write a header row to CSV:
+                    header_csv = "time,target-rate(pps)," \
+                                  + "actual-rate(pps)," \
+                                  + "avg-pkt-send(s)," \
+                                  + "max-pkt-send(s)," \
+                                  + "min-pkt-send(s)" \
+                                  + "\n"
+                    with open(output_file, 'a') as the_file:
+                        the_file.write(header_csv)
+                    first_time = 0
                 timenow = datetime.datetime.now()
                 timestamp = timenow.strftime("%H:%M:%S")
                 result_csv = str(timestamp) \
                     + "," + str(flow_rate) \
                     + "," + str(actual_flow_rate) \
+                    + "," + str(pkt_avg_time) \
+                    + "," + str(pkt_max_time) \
+                    + "," + str(pkt_min_time) \
                     + "\n"
                 with open(output_file, 'a') as the_file:
                     the_file.write(result_csv)
+
+            first_time_in_interval = 1
+            pkts_in_interval = 0
+            pkt_total_time = 0
+            pkt_max_time = 0
+            pkt_min_time = 0
 
             last_increment_time = current_time
             if flow_rate > max_flow_rate:
                 print "reached maximum flow rate, exiting..."
                 break
             prev_packets_sent = packets_sent
-        sleep_time = float(1/flow_rate) - packet_send_overhead
+        total_overhead = time.time() - loop_start_time
+        sleep_time = float(1/flow_rate) - total_overhead
         if sleep_time > 0:
             #*** Sleep for interval seconds:
             time.sleep(sleep_time)
@@ -280,11 +324,12 @@ Options:
  -c, --increment-interval  Interval between incrementing flow rate
                              (default is 1 second)
      --bypass-warn         Bypass the warning message
- -p, --protocol            IP protocol number: 6 for TCP, 17 for UDP 
+ -p, --protocol            IP protocol number: 6 for TCP, 17 for UDP
  -d, --dport               Destination port number
  -w, --output-file         Specify an output filename
  -W                        Output results to default filename
                              default is format YYYYMMDD-HHMMSS.csv
+ -j  --no-header-row       Suppress writing header row into CSV
  -v, --version             Output version information and exit
 
  Results are written in following CSV format (if -w is specified):
