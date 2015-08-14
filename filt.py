@@ -55,7 +55,7 @@ def main(argv):
     """
     Main function of filt
     """
-    version = "0.1.2"
+    version = "0.1.3"
     pkt_send_overhead = 0
     total_overhead_time = 0
     first_time = 1
@@ -238,12 +238,12 @@ def main(argv):
             target_flow_rate = target_flow_rate + flow_rate_increase
             #*** Print to screen:
             print "increasing target flow rate to", target_flow_rate, \
-                       "Actual avg rate", actual_flow_rate
+                       "Previous actual avg rate", actual_flow_rate
             if output_file_enabled:
                 if first_time and header_row:
                     #*** Write a header row to CSV:
-                    header_csv = "time,target-rate(pps)," \
-                                  + "actual-rate(pps)," \
+                    header_csv = "time,next target-rate(pps)," \
+                                  + "previous actual-rate(pps)," \
                                   + "avg-pkt-send(s)," \
                                   + "max-pkt-send(s)," \
                                   + "min-pkt-send(s)" \
