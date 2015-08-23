@@ -56,16 +56,14 @@ def main(argv):
     Main function of filt
     """
     version = "0.1.3"
-    pkt_send_overhead = 0
     total_overhead_time = 0
     first_time = 1
-    first_time_in_interval = 1
     time_remaining_in_interval = 0
     prev_loop_finish_time = 0
     sleep_time = 0
-    pkt_max_time = 0
-    pkt_total_time = 0
-    pkts_in_interval = 0
+    max_rate = 0
+    min_rate = 0
+    prev_pkt_sent_time = 0
     header_row = 1
     initial_flow_rate = 1
     flow_rate_increase = 1
@@ -85,10 +83,11 @@ def main(argv):
     prev_packets_sent = 0
     actual_flow_rate = 0
     debug = 0
+    algorithm = 'flat-top'
 
     #*** Start by parsing command line parameters:
     try:
-        opts, args = getopt.getopt(argv, "hr:f:m:t:c:p:d:w:Wjv",
+        opts, args = getopt.getopt(argv, "hr:f:m:t:c:p:d:w:Wja:v",
                                   ["help",
                                    "initial-flow-rate=",
                                    "flow-rate-increase=",
@@ -101,6 +100,7 @@ def main(argv):
                                    "output-file=",
                                    "no-header-row",
                                    "debug",
+                                   "algorithm=",
                                    "version"])
     except getopt.GetoptError as err:
         print "filt: Error with options:", err
@@ -140,6 +140,8 @@ def main(argv):
         elif opt == "--debug":
             print "Debug is on"
             debug = 1
+        elif opt in ("-a", "--algorithm"):
+            algorithm = arg
 
     if not target_ip:
         #*** We weren't passed a target IP so have to exit
@@ -165,6 +167,8 @@ def main(argv):
     print "WARNING!!!!: Starting network flow stress test..."
     print "================================================="
     time.sleep(1)
+
+    print "Using", algorithm, "algorithm to calculate packet spacing"
 
     target_flow_rate = initial_flow_rate
     last_increment_time = time.time()
@@ -198,20 +202,20 @@ def main(argv):
         #*** Send a packet over raw socket for speed:
         strpkt = str(pkt)
         s.sendto(strpkt, (target_ip, 0))
-        pkt_send_overhead = time.time() - loop_start_time
+        pkt_sent_time = time.time()
         packets_sent += 1
         packets_sent_in_interval = packets_sent - prev_packets_sent
 
-        #*** Accumulate stats on packet sending overhead:
-        pkt_total_time += pkt_send_overhead
-        pkts_in_interval += 1
-        if pkt_send_overhead > pkt_max_time:
-            pkt_max_time = pkt_send_overhead
-        if first_time_in_interval:
-            pkt_min_time = pkt_send_overhead
-            first_time_in_interval = 0
-        elif pkt_send_overhead < pkt_min_time:
-            pkt_min_time = pkt_send_overhead
+        #*** Accumulate stats max and min instantaneous rates:
+        if prev_pkt_sent_time:
+            prev_rate = float(1/(pkt_sent_time - prev_pkt_sent_time))
+            if prev_rate > max_rate:
+                max_rate = prev_rate
+            if prev_rate < min_rate:
+                min_rate = prev_rate
+            if not min_rate:
+                min_rate = prev_rate
+        prev_pkt_sent_time = pkt_sent_time
 
         #*** Increment packet source port:
         sport += 1
@@ -232,7 +236,6 @@ def main(argv):
             #*** Calculate actual average flow rate since last increase:
             actual_flow_rate = packets_sent_in_interval / \
                                  (loop_start_time - last_increment_time)
-            pkt_avg_time = pkt_total_time / pkts_in_interval
 
             #*** Increase target flow rate:
             target_flow_rate = target_flow_rate + flow_rate_increase
@@ -244,9 +247,8 @@ def main(argv):
                     #*** Write a header row to CSV:
                     header_csv = "time,next target-rate(pps)," \
                                   + "previous actual-rate(pps)," \
-                                  + "avg-pkt-send(s)," \
-                                  + "max-pkt-send(s)," \
-                                  + "min-pkt-send(s)" \
+                                  + "previous interpacket max rate," \
+                                  + "previous interpacket min rate," \
                                   + "\n"
                     with open(output_file, 'a') as the_file:
                         the_file.write(header_csv)
@@ -256,20 +258,15 @@ def main(argv):
                 result_csv = str(timestamp) \
                     + "," + str(target_flow_rate) \
                     + "," + str(actual_flow_rate) \
-                    + "," + str(pkt_avg_time) \
-                    + "," + str(pkt_max_time) \
-                    + "," + str(pkt_min_time) \
+                    + "," + str(max_rate) \
+                    + "," + str(min_rate) \
                     + "\n"
                 with open(output_file, 'a') as the_file:
                     the_file.write(result_csv)
 
-            first_time_in_interval = 1
-            pkts_in_interval = 0
-            pkt_total_time = 0
-            pkt_max_time = 0
-            pkt_min_time = 0
-
             last_increment_time = loop_start_time
+            max_rate = 0
+            min_rate = 0
             if target_flow_rate > max_flow_rate:
                 print "reached maximum flow rate, exiting..."
                 break
@@ -294,14 +291,29 @@ def main(argv):
 
         #*** Calculate the time to sleep for before running
         #***  packet loop again:
-        outstanding_packets_in_interval = (target_flow_rate *
+
+        if algorithm == 'flat-top':
+            sleep_time = float(1/target_flow_rate) - total_overhead_time
+        elif algorithm == 'make-good':
+            outstanding_packets_in_interval = (target_flow_rate *
                 increment_interval) - packets_sent_in_interval
-        if outstanding_packets_in_interval:
-            sleep_time = float(time_remaining_in_interval/
-                       outstanding_packets_in_interval) - \
-                       total_overhead_time
+            if outstanding_packets_in_interval > 0:
+                numerator = float(time_remaining_in_interval - \
+                                (1/target_flow_rate))
+                denominator = outstanding_packets_in_interval
+                if debug:
+                    print "numerator is", numerator, "denominator is", \
+                               denominator
+                sleep_time = float(numerator / denominator) - \
+                                      total_overhead_time
+                if debug:
+                    print "sleep is", sleep_time
+
+            else:
+                sleep_time = time_remaining_in_interval
         else:
-            sleep_time = 0
+            print "Unknown algorithm type", algorithm, "Exiting...."
+            sys.exit()
 
         if debug:
             print "d = ", sleep_time
@@ -372,6 +384,9 @@ Options:
                              default is format YYYYMMDD-HHMMSS.csv
  -j  --no-header-row       Suppress writing header row into CSV
      --debug               Turn on debug
+ -a  --algorithm           Select packet rate algorithm
+                             default is 'flat-top'
+                             alternative is 'make-good'
  -v, --version             Output version information and exit
 
  Results are written in following CSV format (if -w is specified):
