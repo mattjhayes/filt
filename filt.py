@@ -55,8 +55,10 @@ def main(argv):
     """
     Main function of filt
     """
-    version = "0.1.3"
-    total_overhead_time = 0
+    version = "0.1.4"
+    loop_overhead_time = 0
+    avg_overhead_time = 0
+    interval_overhead_sum = 0
     first_time = 1
     time_remaining_in_interval = 0
     prev_loop_finish_time = 0
@@ -230,8 +232,66 @@ def main(argv):
             #*** Update UDP source port:
             pkt[UDP].sport = sport
 
+        #*** Per-loop calcs for how long to sleep... zzzz
+        loop_finish_time = time.time()
+        if not prev_loop_finish_time:
+            prev_loop_finish_time = loop_start_time
+        #*** Calculate overheads:
+        loop_overhead_time = (loop_finish_time - \
+                                prev_loop_finish_time) - sleep_time
+        interval_overhead_sum += loop_overhead_time
+        avg_overhead_time = float(interval_overhead_sum /
+                                        packets_sent_in_interval)
+
+        time_remaining_in_interval = increment_interval - \
+                                (loop_finish_time - last_increment_time)
+
+        if debug:
+            print "===================="
+            print "t = ", time_remaining_in_interval
+            print "x = ", target_flow_rate
+            print "i = ", increment_interval
+            print "q = ", packets_sent_in_interval
+            print "h = ", avg_overhead_time
+
+        #*** Calculate the time to sleep for before running
+        #***  packet loop again:
+
+        if algorithm == 'flat-top':
+            sleep_time = float(1/target_flow_rate) - avg_overhead_time
+        elif algorithm == 'make-good':
+            outstanding_packets_in_interval = (target_flow_rate *
+                increment_interval) - packets_sent_in_interval
+            if outstanding_packets_in_interval > 0:
+                numerator = float(time_remaining_in_interval - \
+                                (1/target_flow_rate))
+                denominator = outstanding_packets_in_interval
+                if debug:
+                    print "numerator is", numerator, "denominator is", \
+                               denominator
+                sleep_time = float(numerator / denominator) - \
+                                      avg_overhead_time
+                if debug:
+                    print "sleep is", sleep_time
+
+            else:
+                sleep_time = time_remaining_in_interval
+        else:
+            print "Unknown algorithm type", algorithm, "Exiting...."
+            sys.exit()
+
+        if debug:
+            print "d = ", sleep_time
+
+        prev_loop_finish_time = loop_finish_time
+
+        if sleep_time > 0:
+            #*** Sleep for interval seconds:
+            time.sleep(sleep_time)
+
         #*** Check if we need to up the target flow rate:
-        if (loop_start_time - last_increment_time) > increment_interval:
+        if packets_sent_in_interval >= target_flow_rate * \
+                                            increment_interval:
             #*** Start a new interval
             #*** Calculate actual average flow rate since last increase:
             actual_flow_rate = packets_sent_in_interval / \
@@ -267,62 +327,11 @@ def main(argv):
             last_increment_time = loop_start_time
             max_rate = 0
             min_rate = 0
+            interval_overhead_sum = 0
             if target_flow_rate > max_flow_rate:
                 print "reached maximum flow rate, exiting..."
                 break
             prev_packets_sent = packets_sent
-
-        #*** Per-loop calcs for how long to sleep... zzzz
-        loop_finish_time = time.time()
-        if not prev_loop_finish_time:
-            prev_loop_finish_time = loop_start_time
-        total_overhead_time = (loop_finish_time - \
-                                prev_loop_finish_time) - sleep_time
-        time_remaining_in_interval = increment_interval - \
-                                (loop_finish_time - last_increment_time)
-
-        if debug:
-            print "===================="
-            print "t = ", time_remaining_in_interval
-            print "x = ", target_flow_rate
-            print "i = ", increment_interval
-            print "q = ", packets_sent_in_interval
-            print "h = ", total_overhead_time
-
-        #*** Calculate the time to sleep for before running
-        #***  packet loop again:
-
-        if algorithm == 'flat-top':
-            sleep_time = float(1/target_flow_rate) - total_overhead_time
-        elif algorithm == 'make-good':
-            outstanding_packets_in_interval = (target_flow_rate *
-                increment_interval) - packets_sent_in_interval
-            if outstanding_packets_in_interval > 0:
-                numerator = float(time_remaining_in_interval - \
-                                (1/target_flow_rate))
-                denominator = outstanding_packets_in_interval
-                if debug:
-                    print "numerator is", numerator, "denominator is", \
-                               denominator
-                sleep_time = float(numerator / denominator) - \
-                                      total_overhead_time
-                if debug:
-                    print "sleep is", sleep_time
-
-            else:
-                sleep_time = time_remaining_in_interval
-        else:
-            print "Unknown algorithm type", algorithm, "Exiting...."
-            sys.exit()
-
-        if debug:
-            print "d = ", sleep_time
-
-        prev_loop_finish_time = loop_finish_time
-
-        if sleep_time > 0:
-            #*** Sleep for interval seconds:
-            time.sleep(sleep_time)
 
 def warning_challenge():
     """
