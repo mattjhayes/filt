@@ -42,6 +42,9 @@ from __future__ import division
 import datetime
 import time
 
+#*** For file path:
+import os
+
 #*** Import sys and getopt for command line argument parsing:
 import sys, getopt
 
@@ -55,7 +58,7 @@ def main(argv):
     """
     Main function of filt
     """
-    version = "0.1.4"
+    version = "0.1.5"
     loop_overhead_time = 0
     loop_min_overhead_time = 0
     avg_overhead_time = 0
@@ -81,6 +84,7 @@ def main(argv):
     finished = 0
     output_file = 0
     output_file_enabled = 0
+    output_path = 0
     data = "Data in packet not specified, this is the default..."
     target_mac = "00:01:02:03:04:05"
     packets_sent = 0
@@ -91,7 +95,7 @@ def main(argv):
 
     #*** Start by parsing command line parameters:
     try:
-        opts, args = getopt.getopt(argv, "hr:f:m:t:c:p:d:w:Wjea:v",
+        opts, args = getopt.getopt(argv, "hr:f:m:t:c:p:d:w:Wb:jea:v",
                                   ["help",
                                    "initial-flow-rate=",
                                    "flow-rate-increase=",
@@ -102,6 +106,7 @@ def main(argv):
                                    "protocol=",
                                    "dport=",
                                    "output-file=",
+                                   "output-path=",
                                    "no-header-row",
                                    "elapsed-time",
                                    "debug",
@@ -140,6 +145,8 @@ def main(argv):
         elif opt == "-W":
             output_file = time.strftime("%Y%m%d-%H%M%S.csv")
             output_file_enabled = 1
+        elif opt in ("-b", "--output-path"):
+            output_path = arg
         elif opt in ("-j", "--no-header-row"):
             header_row = 0
         elif opt in ("-e", "--elapsed-time"):
@@ -156,10 +163,13 @@ def main(argv):
         sys.exit()
 
     #*** Display output filename:
+    #*** Display output filename:
     if output_file_enabled:
-        print "results filename is", output_file
+        if output_path:
+            output_file = os.path.join(output_path, output_file)
+        print "Results filename is", output_file
     else:
-        print "Not outputing results to file as option not selected"
+        print "Not outputing results to file, as option not selected"
 
     if not bypass_warn:
         #*** Display a warning message and ask for
@@ -412,6 +422,7 @@ Options:
  -w, --output-file         Specify an output filename
  -W                        Output results to default filename
                              default is format YYYYMMDD-HHMMSS.csv
+ -b, --output-path         Specify path to output file directory
  -j  --no-header-row       Suppress writing header row into CSV
  -e  --elapsed-time        Write an elapsed time column into CSV
                              default is to not write this extra column
