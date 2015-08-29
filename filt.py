@@ -120,7 +120,7 @@ def main(argv):
         if opt in ("-h", "--help"):
             print_help()
             sys.exit()
-        elif opt == '-V':
+        elif opt in ("-v", "--version"):
             print 'filt.py version', version
             sys.exit()
         elif opt in ("-r", "--initial-flow-rate"):
