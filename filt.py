@@ -58,7 +58,7 @@ def main(argv):
     """
     Main function of filt
     """
-    version = "0.1.5"
+    version = "0.1.6"
     loop_overhead_time = 0
     loop_min_overhead_time = 0
     avg_overhead_time = 0
@@ -264,9 +264,14 @@ def main(argv):
         #***  packet loop again:
 
         if algorithm == 'flat-top':
+            #*** This algorithm attempts to hit, but not exceed the
+            #***  target rate
             sleep_time = float(1/target_flow_rate) - \
                                             loop_min_overhead_time
         elif algorithm == 'make-good':
+            #*** This algorithm attempts to hit the target rate as
+            #***  average for interval so will overdrive rate to lift
+            #***  the average if required
             outstanding_packets_in_interval = (target_flow_rate *
                 increment_interval) - packets_sent_in_interval
             if outstanding_packets_in_interval > 0:
@@ -283,6 +288,10 @@ def main(argv):
 
             else:
                 sleep_time = time_remaining_in_interval
+        elif algorithm == 'basic':
+            #*** This is not a good algorithm, only included for
+            #***  comparison purposes, does not account for overheads
+            sleep_time = float(1/target_flow_rate)
         else:
             print "Unknown algorithm type", algorithm, "Exiting...."
             sys.exit()
@@ -428,7 +437,9 @@ Options:
      --debug               Turn on debug
  -a  --algorithm           Select packet rate algorithm
                              default is 'make-good'
-                             alternative is 'make-good'
+                             alternatives are:
+                               'flat-top' - tries to not overdrive rate
+                               'basic' - no allowance for overheads
  -v, --version             Output version information and exit
 
  Results are written in following CSV format (if -w is specified):
