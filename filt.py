@@ -163,7 +163,6 @@ def main(argv):
         sys.exit()
 
     #*** Display output filename:
-    #*** Display output filename:
     if output_file_enabled:
         if output_path:
             output_file = os.path.join(output_path, output_file)
