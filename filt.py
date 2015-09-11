@@ -92,6 +92,7 @@ def main(argv):
     actual_flow_rate = 0
     debug = 0
     algorithm = 'make-good'
+    prev_target_flow_rate = initial_flow_rate
 
     #*** Start by parsing command line parameters:
     try:
@@ -328,6 +329,7 @@ def main(argv):
                                  (loop_start_time - last_increment_time)
 
             #*** Increase target flow rate:
+            prev_target_flow_rate = target_flow_rate
             target_flow_rate = target_flow_rate + flow_rate_increase
             #*** Print to screen:
             print "New target:", target_flow_rate, \
@@ -341,6 +343,7 @@ def main(argv):
                     if elapsed_time:
                         header_csv += "elapsed-time,"
                     header_csv += "next target-rate(pps)," \
+                                  + "previous target-rate(pps)," \
                                   + "previous actual-rate(pps)," \
                                   + "previous interpacket max rate," \
                                   + "previous interpacket min rate," \
@@ -355,6 +358,7 @@ def main(argv):
                     result_csv += str(time.time() - base_start_time) \
                         + ","
                 result_csv += str(target_flow_rate) \
+                    + "," + str(prev_target_flow_rate) \
                     + "," + str(actual_flow_rate) \
                     + "," + str(max_rate) \
                     + "," + str(min_rate) \
