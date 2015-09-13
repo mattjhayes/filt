@@ -30,9 +30,7 @@ Do not use this code on production networks - it
 is proof of concept code and carries no warrantee
 whatsoever. You have been warned.
 .
-May need to install scapy if not already installed
-.
-Uses raw socket to improve packet sending performance
+Requires scapy to be installed
 .
 """
 #*** Get division to return float:
@@ -49,16 +47,13 @@ import os
 import sys, getopt
 
 #*** Import scapy for building packets:
-from scapy.all import Ether, IP, TCP, UDP, Raw
-
-#*** For raw socket sending of packets:
-import socket
+from scapy.all import Ether, IP, TCP, UDP, Raw, sendp
 
 def main(argv):
     """
     Main function of filt
     """
-    version = "0.1.6"
+    version = "0.1.7"
     loop_overhead_time = 0
     loop_min_overhead_time = 0
     avg_overhead_time = 0
@@ -76,6 +71,7 @@ def main(argv):
     flow_rate_increase = 1
     max_flow_rate = 100
     target_ip = 0
+    interface = 0
     increment_interval = 1
     bypass_warn = 0
     protocol = 6
@@ -96,12 +92,13 @@ def main(argv):
 
     #*** Start by parsing command line parameters:
     try:
-        opts, args = getopt.getopt(argv, "hr:f:m:t:c:p:d:w:Wb:jea:v",
+        opts, args = getopt.getopt(argv, "hr:f:m:t:i:c:p:d:w:Wb:jea:v",
                                   ["help",
                                    "initial-flow-rate=",
                                    "flow-rate-increase=",
                                    "max-flow-rate=",
                                    "target-ip=",
+                                   "interface=",
                                    "increment-interval=",
                                    "bypass-warn",
                                    "protocol=",
@@ -132,6 +129,8 @@ def main(argv):
             max_flow_rate = float(arg)
         elif opt in ("-t", "--target-ip"):
             target_ip = arg
+        elif opt in ("-i", "--interface"):
+            interface = arg
         elif opt in ("-c", "--increment-interval"):
             increment_interval = float(arg)
         elif opt == "--bypass-warn":
@@ -161,6 +160,11 @@ def main(argv):
     if not target_ip:
         #*** We weren't passed a target IP so have to exit
         print "filt: Error, no target IP. Exiting..."
+        sys.exit()
+
+    if not interface:
+        #*** We weren't passed an interface so have to exit
+        print "filt: Error, no interface specified. Exiting..."
         sys.exit()
 
     #*** Display output filename:
@@ -204,24 +208,16 @@ def main(argv):
         print "Exiting..."
         sys.exit()
 
-    #*** Create a raw socket:
-    try:
-        s = socket.socket(socket.AF_INET, socket.SOCK_RAW, \
-                                                   socket.IPPROTO_RAW)
-    except socket.error, msg:
-        print 'Socket could not be created. Error Code : ' \
-                                  + str(msg[0]) + ' Message ' + msg[1]
-        sys.exit()
-
     #*** Use for base for calculating total elapsed time:
     base_start_time = time.time()
 
     #*** Start the packet sending loop:
     while not finished:
         loop_start_time = time.time()
-        #*** Send a packet over raw socket for speed:
-        strpkt = str(pkt)
-        s.sendto(strpkt, (target_ip, 0))
+
+        #*** Use scapy to send packet:
+        sendp(pkt, iface=interface, verbose=False)
+
         pkt_sent_time = time.time()
         packets_sent += 1
         packets_sent_in_interval = packets_sent - prev_packets_sent
@@ -418,23 +414,24 @@ Example usage:
   python filt.py <TBD>
 
 Options:
- -h, --help                Display this help and exit
- -r, --initial-flow-rate   Initial new flow rate
+ -h  --help                Display this help and exit
+ -r  --initial-flow-rate   Initial new flow rate
                              (default is 1 new flow per second)
- -f, --flow-rate-increase  Increase in new flows per second per second
+ -f  --flow-rate-increase  Increase in new flows per second per second
                              (default is 1 new flow/s/s)
- -m, --max-flow-rate       Maximum new flow rate before exiting
+ -m  --max-flow-rate       Maximum new flow rate before exiting
                              (default is 100 new flows per second)
- -t, --target-ip           Target IP address (required)
- -c, --increment-interval  Interval between incrementing flow rate
+ -t  --target-ip           Target IP address (required)
+ -i  --interface           Interface name to send traffic out (required)
+ -c  --increment-interval  Interval between incrementing flow rate
                              (default is 1 second)
      --bypass-warn         Bypass the warning message
- -p, --protocol            IP protocol number: 6 for TCP, 17 for UDP
- -d, --dport               Destination port number
- -w, --output-file         Specify an output filename
+ -p  --protocol            IP protocol number: 6 for TCP, 17 for UDP
+ -d  --dport               Destination port number
+ -w  --output-file         Specify an output filename
  -W                        Output results to default filename
                              default is format YYYYMMDD-HHMMSS.csv
- -b, --output-path         Specify path to output file directory
+ -b  --output-path         Specify path to output file directory
  -j  --no-header-row       Suppress writing header row into CSV
  -e  --elapsed-time        Write an elapsed time column into CSV
                              default is to not write this extra column
