@@ -348,7 +348,7 @@ def main(argv):
                         the_file.write(header_csv)
                     first_time = 0
                 timenow = datetime.datetime.now()
-                timestamp = timenow.strftime("%H:%M:%S")
+                timestamp = timenow.strftime('%Y-%m-%d %H:%M:%S.%f')[:-3]
                 result_csv = str(timestamp) + ","
                 if elapsed_time:
                     result_csv += str(time.time() - base_start_time) \
