@@ -53,7 +53,7 @@ def main(argv):
     """
     Main function of filt
     """
-    version = "0.1.7"
+    version = "0.1.8"
     loop_overhead_time = 0
     loop_min_overhead_time = 0
     avg_overhead_time = 0
@@ -98,6 +98,7 @@ def main(argv):
                                    "flow-rate-increase=",
                                    "max-flow-rate=",
                                    "target-ip=",
+                                   "target-mac=",
                                    "interface=",
                                    "increment-interval=",
                                    "bypass-warn",
@@ -129,6 +130,8 @@ def main(argv):
             max_flow_rate = float(arg)
         elif opt in ("-t", "--target-ip"):
             target_ip = arg
+        elif opt == "--target-mac":
+            target_mac = arg
         elif opt in ("-i", "--interface"):
             interface = arg
         elif opt in ("-c", "--increment-interval"):
@@ -422,6 +425,7 @@ Options:
  -m  --max-flow-rate       Maximum new flow rate before exiting
                              (default is 100 new flows per second)
  -t  --target-ip           Target IP address (required)
+     --target-mac          Target MAC address
  -i  --interface           Interface name to send traffic out (required)
  -c  --increment-interval  Interval between incrementing flow rate
                              (default is 1 second)
